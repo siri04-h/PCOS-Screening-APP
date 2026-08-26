@@ -8,6 +8,12 @@ import shap
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
+from app.emotion_fusion import fuse_emotions
+from app.text_emotion import predict_text_emotion
+from app.voice_emotion import predict_voice_emotion
+from app.face_emotion import predict_face_emotion
+from app.recommendation_engine import generate_recommendations
+from app.pattern_analysis import analyze_pattern
 
 
 # ============================================================
@@ -92,6 +98,58 @@ class PCOSResponse(BaseModel):
     riskLevel: str
     riskScore: float
     shap: List[SHAPFeature]
+
+class TextEmotionRequest(BaseModel):
+    text: str = Field(..., min_length=1)
+
+class TextEmotionResponse(BaseModel):
+    emotion: str
+    confidence: float
+
+class VoiceEmotionRequest(BaseModel):
+    audioPath: str
+
+class VoiceEmotionResponse(BaseModel):
+    emotion: str
+    confidence: float
+
+class FaceEmotionRequest(BaseModel):
+    imagePath: str
+
+class FaceEmotionResponse(BaseModel):
+    emotion: str
+    confidence: float
+
+class EmotionFusionRequest(BaseModel):
+    textEmotion: str
+    voiceEmotion: str
+    faceEmotion: str
+    selfReport: str
+
+class EmotionFusionResponse(BaseModel):
+    overallEmotion: str
+    confidence: float
+    sources: dict
+
+class RecommendationRequest(BaseModel):
+    sleepHours: float
+    stressLevel: str
+    waterIntake: float
+    activityLevel: str
+
+class RecommendationResponse(BaseModel):
+    recommendations: list[str]
+
+class PatternRequest(BaseModel):
+    currentSleep: float
+    usualSleep: float
+    currentStress: int
+    usualStress: int
+    currentEnergy: int
+    usualEnergy: int
+
+class PatternResponse(BaseModel):
+    insights: list[str]
 
 
 # ============================================================
@@ -532,3 +590,46 @@ def predict_pcos(
             status_code=500,
             detail=f"Prediction failed: {str(error)}"
         )
+
+@app.post("/emotion/text", response_model=TextEmotionResponse)
+def detect_text_emotion(request: TextEmotionRequest):
+    """
+    Detect emotion from user-entered text.
+    """
+    result = predict_text_emotion(request.text)
+
+    return TextEmotionResponse(
+        emotion=result["emotion"],
+        confidence=result["confidence"]
+    )
+@app.post("/emotion/voice", response_model=VoiceEmotionResponse)
+def detect_voice_emotion(request: VoiceEmotionRequest):
+    result = predict_voice_emotion(request.audioPath)
+    return VoiceEmotionResponse(**result)
+
+@app.post("/emotion/face", response_model=FaceEmotionResponse)
+def detect_face_emotion(request: FaceEmotionRequest):
+    result = predict_face_emotion(request.imagePath)
+    return FaceEmotionResponse(**result)
+
+@app.post("/emotion/fusion", response_model=EmotionFusionResponse)
+def detect_overall_emotion(request: EmotionFusionRequest):
+    result = fuse_emotions(
+        request.textEmotion,
+        request.voiceEmotion,
+        request.faceEmotion,
+        request.selfReport
+    )
+
+    return EmotionFusionResponse(**result)
+
+@app.post("/recommendations", response_model=RecommendationResponse)
+def get_recommendations(request: RecommendationRequest):
+    recs = generate_recommendations(request.model_dump())
+    return RecommendationResponse(recommendations=recs)
+
+@app.post("/pattern-analysis", response_model=PatternResponse)
+def pattern_analysis(request: PatternRequest):
+    return PatternResponse(
+        insights=analyze_pattern(request.model_dump())["insights"]
+    )
